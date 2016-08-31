@@ -1,0 +1,766 @@
+---
+title: "PTM Functions Example"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+#################################################
+#                   FUNCTIONS                   #
+#################################################
+
+#################################################
+# EXTRACT NUMBER OF PROTEINS
+#################################################
+
+  nProteins <- function(data){
+      return(length(unique(data$protein)))
+  }
+  
+  
+#################################################
+# GENERATE SUMMARY OF DATA BY PROTEIN
+#################################################
+
+  getProteinSummary <- function(data){
+      
+      #explanation of aggregate function arguments:
+      # aggreate(variable to summarize, by factor, summary statistic)
+      # this function is used once for each summary statistic
+      #the output of this function is a data frame with the names of the
+      # proteins in the first column, and mass difference summary statistic
+      # in the second
+      # after the first summary statistic (count/length), the [2] index is
+      # used to only add the mass difference summary statistic to the data frame
+      x <- aggregate(data$massdiff, list(data$protein), length)
+      x <- cbind(x, aggregate(data$massdiff, list(data$protein), mean)[2])
+      x <- cbind(x, aggregate(data$massdiff, list(data$protein), median)[2])
+      x <- cbind(x, aggregate(data$massdiff, list(data$protein), min)[2])
+      x <- cbind(x, aggregate(data$massdiff, list(data$protein), max)[2])
+      x <- cbind(x, aggregate(data$massdiff, list(data$protein), sd)[2])
+      colnames(x) <- c("Protein", "Count", "Mean", "Median", "Min", "Max", "SD")
+      return(x)
+  }
+
+  
+#################################################
+# SUBSET DATA BY PROTEIN COUNT
+#################################################
+
+  reduceByCounts <- function(data, thres = 1){
+      #get a table of number of occurances by protein
+      counts <- table(data$protein)
+      #return only those proteins that are greater than or equal to
+      # the threshold
+      return(data[data$protein %in% names(counts[counts >= thres]), ])
+  }
+ 
+   
+#################################################
+# SUBSET DATA BY MASS DIFFERENCE TOP BINS
+#################################################
+
+  reduceByBins <- function(data, topbins){
+    #return data, but only those proteins that appear in the topbins
+    return(data[data$`Bin Center` %in% topbins$`Bin Center`, ])
+
+  }
+
+
+#################################################
+# SUBSET DATA BY MASS DIFFERENCE RANGE
+#################################################
+
+  reduceByRange <- function(data, min, max){
+    #return data, but only those that are greater than or equal to
+    # the minmum specified and less than or equal to the maximum specified
+    return(data[which(data$massdiff >= min & data$massdiff <= max), ])
+  }
+  
+  
+#################################################
+# SUBSET DATA BY PROTEIN
+#################################################
+  
+  reduceByProtein <- function(data, protein){
+    #return data, but only those protein names that are specified
+    return(data[data$protein %in% protein , ])
+  }
+
+  
+#################################################
+# DETERMINE BINS FOR EACH MASS DIFFERENCE
+#################################################
+
+  getBins <- function(data, size = 0.1){
+    
+    #generate a sequence from the lowest mass difference (rounded down) 
+    # to the highest mass difference (rounded up)
+    # by the size of the bin multiplied by 2 (for both sides of the bin)
+    b <- seq(from = floor(min(data$massdiff)), to = ceiling(max(data$massdiff)), by = (size * 2))
+    
+    #if 0 is contained in the sequcen of bins generated
+    # generate a new sequence with more extreme lower and upper bounds, 
+    # and shift that new sequence to contain 0
+    #this is done to ensure 0 is contained in the sequence of bins because 0 mass difference
+    # will be the most common bin
+    if(0 %in% b){
+      b <- seq(from = (floor(min(data$massdiff)) - 1), to = (ceiling(max(data$massdiff)) + 1), by = (size * 2))
+      b <- b - size
+    }
+    
+    #run .bincode function to get the bins of all mass differences
+    bin_results <- .bincode(data$massdiff, b, FALSE, TRUE)
+    #return only the sequence of bins that occur in the results
+    bins <- b[bin_results]
+    #bind the data with the reults of the corresponding mass difference bin
+    d <- cbind(data, (bins + size))
+    #add some column names
+    colnames(d) <- c(colnames(data), paste("Bin Center", "(+/- ", size , ")", sep = ""))
+    return(d)
+  }
+
+
+#################################################
+# DERIVE TOP MASS DIFFERENCE BINS
+#################################################
+
+  topBins <- function(data, size = 0.1, n = 10){
+      
+      #generate a sequence from the lowest mass difference (rounded down) 
+      # to the highest mass difference (rounded up)
+      # by the size of the bin multiplied by 2 (for both sides of the bin)
+      b <- seq(from = floor(min(data$massdiff)), to = ceiling(max(data$massdiff)), by = (size * 2))
+      
+      
+      #if 0 is contained in the sequcen of bins generated
+      # generate a new sequence with more extreme lower and upper bounds, 
+      # and shift that new sequence to contain 0
+      #this is done to ensure 0 is contained in the sequence of bins because 0 mass difference
+      # will be the most common bin
+      if(0 %in% b){
+        b <- seq(from = (floor(min(data$massdiff)) - 1), to = (ceiling(max(data$massdiff)) + 1), by = (size * 2))
+        b <- b - size
+      }
+      
+      #run .bincode function to get the bins of all mass differences
+      bin_results <- .bincode(data$massdiff, b, FALSE, TRUE)
+      #return only the sequence of bins that occur in the results
+      bins <- b[bin_results]
+      
+      #get table of mass difference by bins
+      cc <- aggregate(data$massdiff, list(bins), length)
+      #order the bins from highest counts to lowest
+      cc <- cc[order(-cc[ , 2]),]
+      #return only the top n bins
+      cc <- cc[1:n , ]
+      #add the size of the bin (center to one edge) to the bins 
+      # so that the center of the bin is displayed rather than the lowest bound
+      cc[ , 1] <- cc[ , 1] + size
+      
+      #add column and row names
+      colnames(cc) <- c(paste("Bin Center", "(+/- ", size , ")", sep = ""), "Count")
+      rownames(cc) <- 1:n
+      return(cc)
+      
+  }
+
+
+#################################################
+# GENERATE HISTOGRAMS BY MASS DIFFERENCE TOP BINS
+#################################################
+
+  getModHists <- function(data, topbins, type = "hist"){
+    #make variables a little more readable
+    d <- data
+    tb <- topbins
+    
+    #bins in data that appear in the top bins
+    nd <- d[d$`Bin Center` %in% tb$`Bin Center`, ]
+    colnames(nd)[ncol(nd)] <- "b" 
+    
+    #the three if statements below just change the ggplot2 code depending on whether the user wants
+    # a histogram, density curve, or both
+    if(type == "hist"){
+      g <- ggplot(nd, aes(x = massdiff)) + geom_histogram(binwidth = .01, colour = "black", fill = "white") + 
+        facet_wrap(~ b, scales = "free")
+    }
+    
+    if(type == "freq"){
+      g <- ggplot(nd, aes(x = massdiff)) + geom_freqpoly(binwidth = .01, colour = "red") + 
+        facet_wrap(~ b, scales = "free")
+    }
+    if(type == "both"){
+      g <- ggplot(nd, aes(x = massdiff)) + geom_histogram(binwidth = .01, colour = "black", fill = "white") +
+        geom_freqpoly(binwidth = .01, colour = "red") + 
+        facet_wrap(~ b, scales = "free")
+    }
+    return(g)
+  }
+
+
+#################################################
+# GENERATE HISTOGRAMS BY PROTEIN
+#################################################
+
+  getProteinHists <- function(data, type = "hist"){
+    
+    #the three if statements below just change the ggplot2 code depending on whether the user wants
+    # a histogram, density curve, or both
+    if(type == "hist"){
+    g <- ggplot(data, aes(x = massdiff)) + geom_histogram(binwidth = .01, colour = "black", fill = "white") + 
+             facet_wrap(~ protein, scales = "free")
+    }
+    
+    if(type == "freq"){
+      g <- ggplot(data, aes(x = massdiff)) + geom_freqpoly(binwidth = .01, colour = "red") + 
+               facet_wrap(~ protein, scales = "free")
+    }
+    if(type == "both"){
+      g <- ggplot(data, aes(x = massdiff)) + geom_histogram(binwidth = .01, colour = "black", fill = "white") +
+               geom_freqpoly(binwidth = .01, colour = "red") + 
+               facet_wrap(~ protein, scales = "free")
+    }
+    return(g)
+  }
+
+  
+#################################################
+# GENERATE SUMMARY OF DATA BY BIN
+#################################################
+  
+  getModSummary <- function(data, topbins){
+    
+    #explanation of aggregate function arguments:
+    # aggreate(variable to summarize, by factor, summary statistic)
+    # this function is used once for each summary statistic
+    #the output of this function is a data frame with the names of the
+    # proteins in the first column, and mass difference summary statistic
+    # in the second
+    # after the first summary statistic (count/length), the [2] index is
+    # used to only add the mass difference summary statistic to the data frame
+    #unlike the getProteinSUmmary function, this function only searches the proteins
+    # that fall within the massdifference ranges of the top bins
+    
+    tb <- topbins
+    data <- data[data$`Bin Center` %in% tb$`Bin Center`, ]
+    
+    x <- aggregate(data$massdiff, list(data[ , ncol(data)]), length)
+    x <- cbind(x, aggregate(data$massdiff, list(data[ , ncol(data)]), mean)[2])
+    x <- cbind(x, aggregate(data$massdiff, list(data[ , ncol(data)]), median)[2])
+    x <- cbind(x, aggregate(data$massdiff, list(data[ , ncol(data)]), min)[2])
+    x <- cbind(x, aggregate(data$massdiff, list(data[ , ncol(data)]), max)[2])
+    x <- cbind(x, aggregate(data$massdiff, list(data[ , ncol(data)]), sd)[2])
+    colnames(x) <- c("Bin", "Count", "Mean", "Median", "Min", "Max", "SD")
+    return(x)
+  }
+  
+  
+
+```
+
+<br>
+
+Before starting, remember to run all the code in the PTMFunctions.R file. This will make all the PTM functions available to you in R.
+
+<br>
+
+### Data Format
+
+To use all of the PTM functions, wide format data can contain any number of variables in any order, but the proteins variable must be named "protein", and the mass difference variable must be named "massdiff". This makes it easy for the functions described below to work with the data.
+
+Let's generate some simple data that fulfill these requirements and allow us to explore the PTM functions. We'll save this dataset as *data*:
+
+```{r}
+data <- data.frame(protein = rep(paste("Protein", letters[1:3]), c(2,3,3)), 
+                   massdiff = c(0, 15.5, 0, 15.7, 39.3, 0, 15.9, 39.3))
+```
+
+
+Below is the result of that code. We can see we have three proteins (a, b, and c) and they appear in the data 2, 3, and 3 times, respectively.
+
+```{r, echo=FALSE}
+data
+```
+
+
+<br>
+
+When you're ready to use your own data, you can do so by importing your .csv data using the following command:
+
+```{r, eval = FALSE}
+data <- read.csv("yourfile.csv")
+```
+   
+   
+For this tutorial we'll use the dataset generated above.
+
+<br>
+
+### Summarize and Visualize the Data
+
+#### Determine number of unique proteins
+
+Let's get a quick idea of how many proteins this dataset contains:
+
+```{r}
+nProteins(data)
+```
+
+As we would expect, running the command above tells us we have three unique proteins.
+
+<br>
+
+#### Generate detailed summary of mass differences for each protein
+
+Now let's get a more detailed summary of the data:
+
+```{r}
+getProteinSummary(data)
+```
+
+In the summary, each protein is represented by a row. Again, as we were expecting to see, the proteins a, b, and c have counts of 2, 3, and 3, repectively. We then see the mean, median, minimum, maximum, and standard deviations of each protein's mass differences. 
+
+*Note:* If a protein only appears in the dataset once, its standard deviation will simple display as *NA* because there is no variance to compute.
+
+<br>
+
+#### Generate histograms of mass differences for each protein
+
+To generate histograms, we will need the *ggplot2* package. If you haven't already installed the package, you will need to run the following command to install this package into R:
+
+```{r, eval = FALSE}
+install.packages("ggplot2")
+```
+
+Once you have the *ggplot2* package installed, you can load the package by running:
+
+```{r}
+library("ggplot2")
+```
+
+<br>
+
+Now that we have the *ggplot2* package installed and loaded, let's visualize the mass differences for each protein by using the getProteinHists() function:
+
+```{r}
+getProteinHists(data)
+```
+
+These histograms aren't very exciting with this small dataset, but at least we can confirm what we see in the data:
+
+```{r}
+data
+```
+
+For example, we see in both the histogram above and in *data*, *Protein a* has two mass differences (0 and 15.5). 
+
+<br>
+
+#### Generate bins for mass differences
+
+For many analyses, we will want to analyze the mass differnces by certain ranges (bins). Let's use the getBins() function to bin the mass differences in our dataset.
+
+```{r}
+getBins(data)
+```
+
+
+Notice when we run this function we get our original dataset back, but now we have another column appended to our dataset. Having the bins as part of our data will allow us to use other PTM functions.
+
+Let's overwrite our original dataset that only contained the protein names and mass differences with the output from above that includes our original data and bins:
+
+```{r}
+data <- getBins(data)
+```
+
+
+<br>
+
+
+### Subset the Data
+
+#### Subset data by minimum count
+
+Sometimes we may want to remove proteins that are very infrequent in the data. For example, if we are going to be generating histograms, we many want to include only proteins that occur at least a certain number of times in the data (e.g., 30+).
+
+Let's reduce our data by specifying that a protein must occur at least three times in the data to be included:
+
+```{r}
+reduceByCounts(data, thres = 3)
+```
+
+Notice that protein a, which only appeared twice in the data, is now not included. 
+
+
+<br> 
+
+#### Subset by range
+
+Other times we may want to only include proteins with mass differences within a certain range. Let's reduce the data by only including proteins with mass differences between 15 and 16 (both min and max are inclusive):
+
+```{r}
+reduceByRange(data, min = 15, max = 16)
+```
+
+We can see that our subsetted includes only proteins that have mass differenes inbetween 15 and 16.
+
+<br> 
+
+#### Subset by protein name
+
+We can also choose to include only a particular protein, such as *Protein a*:
+
+
+```{r}
+reduceByProtein(data, protein = "Protein a")  
+```
+
+Now we have subsetted our data by only including *Protein a*.
+
+<br>
+
+Sometimes we may want to subset our data by several proteins. Let's use the same function, but this time combine, or concatenate, two proteins to subset our data by. We will use the *c()* function inside our *reduceByProtein()* function R to do so:
+
+```{r}
+reduceByProtein(data, protein = c("Protein a", "Protein b"))
+```
+
+Now we have subsetted our data by only including *Protein a* and *Protein b*.
+
+<br> 
+
+#### Determine top *n* bins
+
+Sometimes we may want to determine which ranges of mass differences are most common in the data. Let's see the top two ranges of mass differences that are most commonly represented in the data:
+
+```{r}
+topBins(data, size = 0.1, n = 2)
+```
+
+As we can see, the range from -0.1 to 0.1, and the range from 39.1 to 39.3, are the most frequent ranges of mass differences.
+
+<br> 
+
+#### Generate Histograms from top *n* bins
+
+Let's visualize the distributions of the mass differences from the top *n* bins. To do so we need to first save the output from the *topBins()* function:
+
+```{r}
+tb <- topBins(data, size = 0.1, n = 2)
+```
+
+This is the same command as above, but this time we've just saved that output to the object called *tb*.
+
+<br>
+
+Now we can get histograms for the mass differences from the top *n* bins. We use our data and the object that contains the information about the top bins in the *getModHists()* function:
+
+
+```{r}
+getModHists(data, tb, "hist") 
+```
+
+Again, these histograms aren't very interesting given our simple data, but they mirror what we see in the data.
+
+<br>
+
+If instead of a histogram we want to generate frequency plot, we can change the last argument of of the command above:
+
+```{r, eval = FALSE}
+getModHists(data, tb, "freq") 
+```
+
+If we want a histogram with an overlaid freqency plot, we write:
+
+```{r, eval = FALSE}
+getModHists(data, tb, "both")
+```
+
+
+<br> 
+
+#### Subset data according to top *n* bins
+
+Let's look at this data from the top 2 bins (mass difference from -0.1 to 0.1, and 39.1 to 39.3):
+
+```{r}
+reduceByBins(data, tb)
+```
+
+Now we are only including proteins that have mass differences from the ranges specified in the top 2 bins.
+
+<br>
+
+We could also save this subsetted data for further analysis:
+
+```{r}
+data_t2b <- reduceByBins(data, tb)
+```
+
+We could of course save this subsetted data using any object name we choose, it doesn't have to be *data_t2b*.
+
+<br>
+
+#### Summarize data by top *n* bins
+
+Now let's look at this data from the top 2 bins:
+
+```{r}
+getModSummary(data, tb)
+```
+
+This output is just like when we used the *getProteinSummary()* function, but rather than rows representing proteins in the dataset, here we have mass difference ranges representing rows. Again, we see the count, mean, median, minimum, maximum, and standard deviation for the mass differences within each bin.
+
+*Note:* Similar to the *getProteinSummary()* function, if a bin only has a count of one, its standard deviation will simple display as *NA* because there is no variance to compute.
+
+<br>
+
+### Advanced Usage
+
+Many times, using just one PTM function will not allow us to subset the data the way we want. To solve this problem, we can use multiple functions in conjuction with each other. This will allow us to subset the data in a way that suits our needs. 
+
+For example, let's say we are really only interested in proteins that have mass differences that occur within a particular range (say 15 to 40), and occur a minimum number of times (say 3). Furthermore, let's say that once we reduce that data down according to those criteria, we discover we are really only interested in *Protein b*.
+
+We can use three previously demonstrated functions to accomplish this task.
+
+First, we can subset the data by specificying a minimum frequency (count), and save this subsetted data as a new object (such as *rd* for *reduced data*):
+
+```{r}
+rd <- reduceByCounts(data, thres = 3)
+```
+
+Let's confirm that reduced the data to include only those proteins that occur at least 3 times by printing our *rd* object:
+
+```{r}
+rd
+```
+
+Sure enough, we have now reduced our data to to include only those proteins that occur at least 3 times.
+
+<br>
+
+Now, let's subset that data by specifying that the mass differences of the proteins be between 15 and 40 Daltons:
+
+```{r}
+reduceByRange(rd, 15, 40)
+```
+
+Just as we expect, now we only have proteins included that occur 3 or more times, and have mass differences between 15 and 40 Daltons.
+
+Notice we are using our reduced data, *rd*, as our data input for the *reduceByRange()* function, not our original *data* object. Remember, we are doing this because we are wanting to further subset our data that only contained proteins that occured 3 or more times, which we saved as *rd*.
+
+<br>
+
+Let's overwrite our *rd* dataset with this newly subsetted data: 
+
+```{r}
+rd <- reduceByRange(rd, 15, 40)
+```
+
+<br>
+
+Now, our final step is to further subset this data by only included *Protein b* in this newly subsetted data. We can do this by using the *reduceByProtein()* function:
+
+```{r}
+reduceByProtein(rd, "Protein b")
+```
+
+Notice again we are using our *rd* dataset and not our original dataset.
+
+<br>
+
+We have subsetted our original dataset down to include only proteins that occured three or more times, that had mass differences between 15 and 40 Daltons, and then further subsetted this data to include only *Protein b*.
+
+<br>
+
+#### Nesting functions
+
+There is one more trick we could use. We could use the same three functions to subset our data as demonstrated above, but rather than using them one after another, we can nest them into one command:
+
+```{r}
+reduceByProtein(reduceByRange(reduceByCounts(data, thres = 3), 15, 40), "Protein b")
+```
+
+This gives us the exact same result as before when we used the functions one after another.
+
+Notice here that the first argument (which specifies the data) for the *reduceByProtein()* and *reduceByRange()* functions are functions rather than data objects. This works the same way as using data objects, but saves us from having to run the commands one at a time and saving over our *rd* data each time.
+
+<br>
+
+### PTM Function Library
+
+In this section, for each PTM function, I will list all possible arguments and possible values of the arguments including the argument's default.
+
+<br>
+
+Because R does not read spaces between arguments, rather than write the functions on a single line as we have done so far, like this:
+
+
+```{r, eval = FALSE}
+mean(x)
+```
+
+
+I will expand the function across multiple lines and comment the arguments like this:
+
+```{r, eval = FALSE}
+mean(
+    x    #the numbers to find the mean of
+    )
+```
+
+<br>
+
+#### PTM Functions:
+
+
+#### nProteins()
+
+```{r , eval = FALSE}
+nProteins(
+    data             #data as described at top of this document
+)
+```
+
+
+<br>
+
+#### getProteinSummary()
+
+```{r , eval = FALSE}
+getProteinSummary(
+    data             #data as described at top of this document
+)
+```
+
+
+<br>
+
+#### reduceByCounts()
+
+```{r, eval = FALSE}
+reduceByCounts(
+    data,            #data as described at top of this document
+    thres = 1        #the minimum count for a protein to be included (default = 1)
+)
+```
+
+
+<br>
+
+#### reduceByBins()
+
+```{r, eval = FALSE}
+reduceByBins(
+    data,            #data as described at top of this document
+    topbins = tb     #the object (e.g., tb) that contains the list of top bins from the getBins() function
+)
+```
+
+<br>
+
+#### reduceByRange()
+
+```{r, eval = FALSE}
+reduceByRange(
+    data,            #data as described at top of this document
+    min = 15,        #minimum (inclusive) mass difference to be included in subsetted data
+    max = 40         #maximum (inclusive) mass difference to be included in subsetted data    
+)
+```
+
+<br>
+
+#### reduceByProtein()
+
+```{r, eval = FALSE}
+reduceByProtein(
+    data,            #data as described at top of this document
+    protein = "Pr a" #the protein(s) to include in the subsetted data
+)
+```
+
+<br>
+
+#### getBins()
+
+```{r, eval = FALSE}
+getBins(
+    data,            #data as described at top of this document
+    size = 0.1       #the total size of the bin divided by 2 (i.e., from bin center to edge) (default = 0.1)
+)
+```
+
+
+<br>
+
+#### topBins()
+
+```{r, eval = FALSE}
+topBins(
+    data,            #data as described at top of this document
+    size = 0.1,      #the total size of the bin divided by 2 (i.e., from bin center to edge) (default = 0.1)
+    n = 10           #the number of top bins to include (default = 10)
+)
+```
+
+
+
+<br>
+
+#### getModHists()
+
+```{r, eval = FALSE}
+getModHists(
+    data,            #data as described at top of this document
+    topbins = tb,    #the object (e.g., tb) that contains the list of top bins from the getBins() function
+    type = "hist"    #either "hist" = histogram, "freq" = frequency, or "both" (deafult = "hist")
+)
+```
+
+
+<br>
+
+#### getProteinHists()
+
+```{r, eval = FALSE}
+getProteinHists(
+    data,            #data as described at top of this document
+    type = "hist"    #either "hist" = histogram, "freq" = frequency, or "both" (deafult = "hist")
+)
+```
+
+
+
+<br>
+
+#### getModSummary()
+
+```{r, eval = FALSE}
+getModSummary(
+    data,            #data as described at top of this document
+    topbins = tb     #the object (e.g., tb) that contains the list of top bins from the getBins() function
+)
+```
+
+<br>
+
+#### Questions or comments
+
+If you have any further questions, or comments, you can contact Matt Cook (cookm346@myumanitoba.ca).
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>

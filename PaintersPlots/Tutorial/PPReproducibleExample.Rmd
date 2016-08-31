@@ -1,0 +1,737 @@
+---
+title: "Painter's Plot Functions Example"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include=FALSE}
+
+####################################
+#convert raw counts to proportions
+####################################
+
+getProp <- function(data){
+  #for each column, 
+  # each element is divided by the sum of that column
+  for(i in 1:ncol(data)){
+    data[ , i] <- (data[ , i] / sum(data[ , i]))
+  }
+  return(data)
+}
+
+
+###########################################################
+#convert data to long format and determine hclust branches 
+###########################################################
+
+meltData <- function(data, n_branches = 1, subject_numbers = TRUE, dist = "euclidean"){
+  
+  data <- apply(data, 2, rev)
+  
+  #add subject number IDs
+  if(subject_numbers == TRUE){
+      colnames(data) <- 1:ncol(data)
+  }
+  
+  #transpose data
+  data <- t(data)
+  
+  
+  ##main code to melt data into long format
+  #subject IDs are replicated
+  s <- rep(cbind(rownames(data)), ncol(data))
+  
+  #Protein or bug names are replicated
+  p <- rep(cbind(colnames(data)), each = nrow(data))
+  
+  #convert data matrix into vector
+  prop <- as.numeric(c(data))
+  
+  #combine data into dataframe and add column names
+  dl <- data.frame(s, p, prop)
+  colnames(dl) <- c("Subject", "Protein", "Proportion")
+  
+  #select clustering method
+    
+    if(dist == "euclidean"){
+      hc <- hclust(dist(data))
+    }
+    if(dist == "pearson"){
+      hc <- hclust(dist(cor(t(data), method = "pearson")))
+    }
+    if(dist == "spearman"){
+      hc <- hclust(dist(cor(t(data), method = "spearman")))
+    }
+  
+    #add branch information to long format data
+    b <- paste("Branch", as.numeric(cutree(hc, n_branches)))
+    b <- rep(b, ncol(data))
+    dl <- cbind(dl, b)
+    colnames(dl)[4] <- "Branch"
+    
+    #row order
+    ro <- rownames(data)[hc$order]
+    
+    #use row order to change factor ordering
+    # needed for corerct ordering of subjects in plots
+    dl$Subject <- factor(dl$Subject, levels = ro)
+    
+    #add clustering order to factors of long data
+    # dl$Subject <- factor(dl$Subject, levels = hc$order)
+    
+
+  return(dl)
+}
+
+
+###########################
+#Generate Painter's Plot
+###########################
+
+PPlot <- function(data, n_branches = 1, subject_numbers = TRUE, prop = FALSE, omit = "none", colors = "default", dist = "euclidean"){
+  
+  #default high contrast colors
+  clrs <- c("#000000", "#5A0007", "#FFFF00", "#997D87", "#B79762", "#008941", "#006FA6", "#A30059",
+            "#5A0007", "#7A4900", "#0000A6", "#63FFAC", "#004D43", "#FF4A46", "#8FB0FF", "#FF34FF",
+            "#1CE6FF", "#809693", "#FEFFE6", "#1B4400", "#4FC601", "#3B5DFF", "#4A3B53", "#FF2F80",
+            "#61615A", "#BA0900", "#6B7900", "#00C2A0", "#FFAA92", "#FF90C9", "#B903AA", "#D16100",
+            "#DDEFFF", "#000035", "#7B4F4B", "#A1C299", "#300018", "#0AA6D8", "#013349", "#00846F",
+            colors())
+  
+  #if user defines any other colors it will copy over default colors
+  # while retaining the rest of the list
+  if(any(colors != "default")){
+    clrs[1:length(colors)] <- colors
+  }
+  
+  #remove omitted bugs
+  if(any(omit != "none")){
+    rn <- rownames(data)         #data rownames
+    x <- which(rn %in% omit)     #the row numbers of the omitted bugs
+    data <- data[-(x), ]         #remove the rows of the omitted bugs
+    clrs <- clrs[-(x)]           #remove the corresponding colors
+  }
+  
+  #get proportion data
+  if(prop == FALSE){
+    data <- getProp(data)
+  }
+  
+  #use meltData function
+  dl <- meltData(data, n_branches, subject_numbers, dist)
+  
+  #use ggplot2 to make basic bar plot
+  pp <- ggplot(dl, aes(x = as.factor(Subject), y = Proportion, fill = Protein)) +
+    geom_bar(stat = "identity") + xlab("Subject") + ylab("Microbial proportions") +
+    scale_fill_manual(values = clrs, guide = guide_legend(title = " "))
+  
+  #if branches is not equal to one, this adds the different groupings
+  # to the already existing plot
+  if(n_branches != 1) {
+    pp <- pp + facet_grid(~ Branch, scale="free_x", space = "free_x")
+  }
+  
+  #if default subject IDs are used, this makes the subject IDs in the vertical 
+  # so they don't get too crowded in the graph
+  if(subject_numbers == FALSE){
+    pp <- pp + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  }
+  
+  #return the painter's plot
+  return(pp)
+}
+
+
+##########################################  
+#view hierarchical clustering dendrograms
+##########################################
+
+plotClust <- function(data, subject_numbers = TRUE, prop = FALSE, dist = "euclidean"){
+  
+  #convert raw data into proportions
+  if(prop == FALSE){
+    data <- getProp(data)
+  }
+  
+  #add subject number IDs
+  if(subject_numbers == TRUE){
+    colnames(data) <- 1:ncol(data)
+  }
+  
+  #select clustering distance metric
+  if(dist == "euclidean"){
+    hc <- hclust(dist(t(data)))
+  }
+  if(dist == "pearson"){
+    hc <- hclust(dist(cor(data, method = "pearson")))
+  }
+  if(dist == "spearman"){
+    hc <- hclust(dist(cor(data, method = "spearman")))
+  }
+  
+  #widen margins
+  par(mar = c(5,5,5,10))
+  
+  #return plot
+  return(plot(as.dendrogram(hc),horiz=FALSE))
+  
+  #turn graphics device off (resets margins)
+  dev.off()
+  
+}
+
+####################
+#get summary by bug 
+####################
+
+getSummary <- function(data, prop = FALSE){
+  
+  #convert raw data into proportion
+  if(prop == FALSE){
+    data <- getProp(data)
+  }
+  
+  #remove scientific notation
+  options(scipen = 999)
+  
+  #get summary statistics
+  # apply a function over the rows (1) of data
+  m <- apply(data, 1, mean)       #mean
+  me <- apply(data, 1, median)    #median
+  mn <- apply(data, 1, min)       #min
+  mx <- apply(data, 1, max)       #max
+  sd <- apply(data, 1, sd)        #sd
+  
+  #combine all summary measures and add column names
+  s <- cbind(m, me, mn, mx, sd)
+  colnames(s) <- c("Mean", "Median", "Min", "Max", "SD")
+  
+  #return summary matrix
+  return(s)
+}
+
+
+#########################
+#get Shannon's H Bar Plot 
+#########################
+
+shanH <- function(data, n_branches = 1, prop = FALSE, omit = "none", dist = "euclidean"){
+  
+  #remove omitted bugs
+  if(any(omit != "none")){
+    rn <- rownames(data)         #data rownames
+    x <- which(rn %in% omit)     #the row numbers of the omitted bugs
+    data <- data[-(x), ]         #remove the rows of the omitted bugs
+  }
+  
+  #get proportion data
+  if(prop == FALSE){
+    data <- getProp(data)
+  }
+  
+  #conduct Shannon's H
+  s <- diversity(t(data), "shannon")
+  d <- data.frame(1:length(s), s)
+  colnames(d) <- c("Subject", "S")
+  
+  #conduct hierarchical clustering
+  if(dist == "euclidean"){
+    hc <- hclust(dist(t(data)))
+  }
+  if(dist == "pearson"){
+    hc <- hclust(dist(cor(data, method = "pearson")))
+  }
+  if(dist == "spearman"){
+    hc <- hclust(dist(cor(data, method = "spearman")))
+  }
+  
+  #add branch information to data
+  b <- paste("Branch", as.numeric(cutree(hc, n_branches)))
+  d <- cbind(d, b)
+  colnames(d)[3] <- "Branch"
+  
+  #add clustering order to factors of data
+  d$Subject <- factor(d$Subject, levels = hc$order)
+  
+  #use ggplot2 to make basic bar plot
+  sh <- ggplot(data=d, aes(x = Subject, y = S)) + geom_bar(stat="identity") + ylab("Shannon's H")
+  
+  #if branches is not equal to one, this adds the different groupings
+  # to the already existing plot
+  if(n_branches != 1) {
+    sh <- sh + facet_grid(~ Branch, scale="free_x", space = "free_x")
+  }
+  
+  #return the bar plot
+  return(sh)
+}
+
+
+#########################
+#get HC branches 
+#########################
+
+branches <- function(data, n_branches = 1, subject_numbers = TRUE, prop = FALSE, omit = "none", dist = "euclidean"){
+    
+    #add subject number IDs
+    if(subject_numbers == TRUE){
+        colnames(data) <- 1:ncol(data)
+    }
+    
+    #remove omitted bugs
+    if(any(omit != "none")){
+        rn <- rownames(data)         #data rownames
+        x <- which(rn %in% omit)     #the row numbers of the omitted bugs
+        data <- data[-(x), ]         #remove the rows of the omitted bugs
+    }
+    
+    if(prop == FALSE){
+        data <- getProp(data)
+    }
+    
+    #transpose data so that hclust clusters by subjects, not microbes
+    data <- t(data)
+    
+    if(dist == "euclidean"){
+        hc <- hclust(dist(data))
+    }
+    if(dist == "pearson"){
+        hc <- hclust(dist(cor(t(data), method = "pearson")))
+    }
+    if(dist == "spearman"){
+        hc <- hclust(dist(cor(t(data), method = "spearman")))
+    }
+    
+    #add branch information to long format data
+    b <- as.character(cutree(hc, n_branches))
+    
+    #column bind branch information and transposed data
+    r <- cbind(b, data)
+    
+    #re-transpose data so it in same structure as original
+    r <- t(r)
+    r <- as.data.frame(r)
+    
+    rownames(r)[1] <- "Branch"
+    
+    #reorder data so that it is the same as the painter's plot
+    r <- r[ , hc$order]
+    
+    #reorder data so that branches are order 1..n
+    r <- r[ , order(r[1,])]
+    
+    return(r)
+}
+ 
+
+```
+
+<br>
+
+Before starting, remember to run all the code in the PPFunctions.R file. This will make all the Painter's Plot functions available to you in R.
+
+<br>
+
+## Data Format
+
+In your dataset, each row should represent a microbe and each column should represent a subject. The data can be raw count data, or proportional data by subject. Raw format data will allow for greater flexibility.
+
+Let's generate some simple data that fulfill these requirements and allow us to explore the Painter's Plot functions:
+
+```{r}
+set.seed(1) #set random number generator
+data <- matrix(round(runif(60, 1, 1000), 2), 10, 6)
+rownames(data) <- paste("Microbe", letters[1:10])
+colnames(data) <- paste("Subject", 1:6)
+
+```
+
+Let's get a look at our data, which has 10 microbes (rows) and 6 subjects (columns):
+
+```{r}
+data
+```
+
+
+<br>
+
+#### Summarize data
+
+Let's get a sense of the data, by using the *getSummary()* function:
+
+```{r}
+getSummary(data)
+```
+
+As we can see above, the mean, median, minimum, maximum, and standard deviation for each microbe is displayed.
+
+Notice that this summary gives the results in proportions, rather than as expressed by the raw counts of our data. This standardizes the comparisions made between microbes.
+
+<br>
+
+#### Generate a Basic Painter's Plot
+
+To generate painter's plots, we will need the *ggplot2* package. If you haven't already installed the package, you will need to run the following command to install this package into R:
+
+```{r, eval = FALSE}
+install.packages("ggplot2")
+```
+
+Once you have the *ggplot2* package installed, you can load the package by running:
+
+```{r}
+library("ggplot2")
+```
+
+You only have to install any package in R once, but it will need to be loaded each new R session.
+
+<br>
+
+One quick tip: Make sure the *Plots* window in RStudio isn't too small, otherwise you might get an error message when trying to display the plot.
+
+<br>
+
+Let's generate a painter's plot using our simple dataset:
+
+```{r}
+PPlot(data)
+```
+
+<br>
+
+#### Proportion vs. Raw Data
+
+Notice that each bar in the plot above sums to 1. This is because, just like when we generated a summary of the data, the function automatically converts our raw data to proportions. If our data was already expressed in proportions, we can override this default:
+
+```{r, eval = FALSE}
+PPlot(data, prop = TRUE)
+```
+
+The *prop* is short for *proportion* and by setting it to TRUE (as opposed to FALSE) the function won't convert our data to proprtions, becasue it is *TRUE* that our data is proportional.
+
+<br>
+
+We can do the same thing with our summary of our data if we want to stop the function from asssuming our data is in raw format:
+
+```{r}
+getSummary(data, prop = TRUE)
+```
+
+<br>
+
+#### Group Subjects by Hierarchical Clustering Branches
+
+Often we will want to group the subjects in our painter's plot, which is done by hierarchical clustering. We may want to group our subjects by, say, the top 2 branches from hierarchical clustering. This is easy enough to do:
+
+```{r}
+PPlot(data, 2)
+```
+
+The second argument of this function is the number of branches to group subjects by. The following code would group the subjects by the top 5 branches:
+
+```{r, eval = FALSE}
+PPlot(data, 5)
+```
+
+
+<br>
+
+#### Using Original Subject IDs
+
+Let's keep grouping subjects using the top two branches, and see what other options are available to us.
+
+Notice that in our data our subject (column) names were *Subject 1*, *Subject 2*, etc., but now in the painter's plot they are just numbered. We can get our original names back by altering our command:
+
+```{r}
+PPlot(data, 2, subject_numbers = FALSE)
+```
+
+This prevents the function from numbering the subjects according to their order in the dataset. Using the original subject names turns the names vertical in the painter's plot to avoid all the names from overlapping.
+
+<br>
+
+#### Omitting Microbes
+
+What would this plot look like if we removed *Microbe b* from our data and then re-computed the proportions?
+
+We can find out by adding the *omit* argument to our command:
+
+```{r}
+PPlot(data, 2, omit = "Microbe b")
+```
+
+Notice that all the microbe colors stay the same even though we just removed a microbe. Also, the proportions for each subject are re-computed with *Microbe b* removed (hence, each bar sums to 1).
+
+We can also use the *c()* which stands for *combine*, or *concatenate* to specify several microbes to omit from analysis:
+
+```{r}
+PPlot(data, 2, omit = c("Microbe b", "Microbe h"))
+```
+
+
+<br>
+
+#### Changing Deafult Colors
+
+What if we wanted to change the default colors? We can do that by adding the *col* (short for *color*) argument to our command:
+
+```{r}
+PPlot(data, 2, col = c("pink", "aliceblue", "cyan"))
+```
+
+
+All the remaining colors are left unchanged. We can use any Hex Color Code (e.g. #000000 for black). Or we can get a list of all colors available by name in R using the following command:
+
+```{r, eval = FALSE}
+colors()
+```
+
+```{r, echo = FALSE}
+c(colors()[1:15], "...")
+```
+
+
+<br>
+
+#### Changing the Hierarchical Clustering Distance Metric
+
+So far, all the painter's plot we have generated have been using the Euclidean (straight-line) distance for the distance metric for Hierarchical Clustering. But the *PPlot()* function has two other distance metrics available: Pearson Correlation and Spearman Rank Correlation. We can change the default Euclidean distance by using one of the commands below:
+
+```{r, eval = FALSE}
+PPlot(data, 2, dist = "pearson")
+PPlot(data, 2, dist = "spearman")
+```
+
+<br>
+
+### Putting it all together
+
+Let's put together the different elements of what we've been exploring. First, let's generate a larger dataset:
+
+```{r}
+set.seed(1) #set random number generator
+data <- matrix(round(runif(780, 1, 1000), 2), 26, 30)
+rownames(data) <- paste("Microbe", letters[1:26])
+colnames(data) <- paste("Subject", 1:30)
+```
+
+<br>
+
+Let's see what a painter's plot for this data look like using the default arguments of the *PPlot()* function:
+
+```{r}
+PPlot(data)
+```
+
+
+<br>
+
+Suppose we want to group subjects by the top 4 branches with their original IDs, use Pearson Corelation for our distance metric, as well as remove microbes a, s, and y. We can accomplish that will the following command:
+
+```{r}
+PPlot(data, 4, subject_numbers = FALSE, dist = "pearson", omit = c("Microbe a", "Microbe s", "Microbe y"))
+```
+
+
+<br>
+
+### Generate Shannon's H Bar Plot
+
+To generate a Shannon's H Bar Plot, we will need the *vegan* package. If you haven't already installed the package, you will need to run the following command to install this package into R:
+
+```{r, eval = FALSE}
+install.packages("vegan")
+```
+
+Once you have the *vegan* package installed, you can load the package by running:
+
+```{r, message=FALSE, warning=FALSE}
+library("vegan")
+```
+
+<br>
+
+In addition to our painter's plot, often we want to include a bar chart showing each subject's diversity. This can be accomplished using Shannon's H. To generate Shannon's H Bar Plot, we use the following command:
+
+```{r}
+shanH(data)
+```
+
+Because our data is generated using random numbers, we don't get very much diversity across subjects.
+
+But, notice that each subject is in the same order as the the painter's plot with no subject groupings:
+
+```{r}
+PPlot(data)
+```
+
+<br>
+
+To make our bar chart have the same subject groupings as our painter's plot with 4 groupings above, we alter our command in the same way we did with the *PPlot()* function,  where we used the top 4 branches, used Pearson's Correlation, and omitted Microbes a, s, and y:
+
+```{r}
+shanH(data, 4, dist = "pearson", omit = c("Microbe a", "Microbe s", "Microbe y"))
+```
+
+<br>
+
+### Viewing Hierarchical Clustering Dendrograms
+
+To make it easy to visualize the ordering of subjects and to see how using different numbers of branches may affect our groupings, we can view the hierarchical clustering dendrograms:
+
+```{r}
+plotClust(data)
+```
+
+As with with the previously demostrated functions, we can change the distance metric to Pearson or Spearman Correlation, use original subject IDs, or specify whether our data is already proportional. For example:
+
+```{r, eval = FALSE}
+plotClust(data, subject_numbers = FALSE) #original subject IDs
+plotClust(data, dist = "pearson")        #Pearson correlation
+plotClust(data, prop = TRUE)             #data already proportional
+```
+
+<br>
+
+### Saving Reordered Data and Branches
+
+```{r, echo = FALSE}
+set.seed(1) #set random number generator
+data <- matrix(round(runif(60, 1, 1000), 2), 10, 6)
+rownames(data) <- paste("Microbe", letters[1:10])
+colnames(data) <- paste("Subject", 1:6)
+
+options(digits = 2)
+```
+
+
+Often it may be desirable to view or save the order of subjects and the branches they belong to in the painter's plot. To do that, we can use the *branches()* function. We have many of the same arguments available (e.g., number of branches, whether the data is proportional already, etc.):
+
+```{r}
+branches(data, 2, prop = TRUE)
+```
+
+We can see when we use this function, we get our data returned back to us with two differences. First, there is a row appended to our data that contains the branch information. Second, the columns (subjects) are reordered by branch.
+
+<br>
+
+### Painter's Plot Function Library
+
+In this section, for each Painter's Plot function, I will list all possible arguments and possible values of the arguments including the argument's default.
+
+<br>
+
+Because R does not read spaces between arguments, rather than write the functions on a single line as we have done so far, like this:
+
+
+```{r, eval = FALSE}
+mean(x)
+```
+
+
+I will expand the function across multiple lines and comment the arguments like this:
+
+```{r, eval = FALSE}
+mean(
+    x    #the numbers to find the mean of
+    )
+```
+
+<br>
+
+#### Painter's Plot Functions:
+
+
+#### PPlot()
+
+```{r , eval = FALSE}
+PPlot(
+    data,                    #data as described at top of this document
+    n_branches = 1,          #number of branches to group subjects by (default = 1)  
+    subject_numbers = TRUE,  #if the original subject IDs should be replaced with numbers (default = TRUE) 
+    prop = FALSE,            #if the data is proportional (default = FALSE)
+    omit = "none",           #which microbes to omit (default = none)
+    colors = "default",      #which colors to use to overwrite deafult (default = "default")
+    dist = "euclidean"       #distance metric ("euclidean", "pearson", or "spearman") (default = "euclidean")
+)
+```
+
+<br>
+
+#### getSummary()
+
+```{r , eval = FALSE}
+getSummary(
+    data,                    #data as described at top of this document
+    prop = FALSE             #if the data is proportional (default = FALSE)
+)
+```
+
+<br>
+
+#### shanH()
+
+```{r , eval = FALSE}
+shanH(
+    data,                    #data as described at top of this document
+    n_branches = 1,          #number of branches to group subjects by (default = 1)  
+    prop = FALSE,            #if the data is proportional (default = FALSE)
+    omit = "none",           #which microbes to omit (default = none)
+    dist = "euclidean"       #distance metric ("euclidean", "pearson", or "spearman") (default = "euclidean")
+)
+```
+
+<br>
+
+#### plotClust()
+
+```{r , eval = FALSE}
+PPlot(
+    data,                    #data as described at top of this document
+    subject_numbers = TRUE,  #if the original subject IDs should be replaced with numbers (default = TRUE) 
+    prop = FALSE,            #if the data is proportional (default = FALSE)
+    dist = "euclidean"       #distance metric ("euclidean", "pearson", or "spearman") (default = "euclidean")
+)
+```
+
+<br>
+
+#### branches()
+
+
+```{r , eval = FALSE}
+branches(
+    data,                    #data as described at top of this document
+    n_branches = 1,          #number of branches to group subjects by (default = 1)  
+    prop = FALSE,            #if the data is proportional (default = FALSE)
+    subject_numbers = TRUE,  #if the original subject IDs should be replaced with numbers (default = TRUE)
+    omit = "none",           #which microbes to omit (default = none)
+    dist = "euclidean"       #distance metric ("euclidean", "pearson", or "spearman") (default = "euclidean")
+)
+```
+
+
+
+<br>
+
+#### Questions or comments
+
+If you have any further questions, or comments, you can contact Matt Cook (cookm346@myumanitoba.ca).
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+

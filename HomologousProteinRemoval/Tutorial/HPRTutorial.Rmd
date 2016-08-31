@@ -1,0 +1,85 @@
+---
+title: "Homologous Protein Removal Functions Example"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+<br>
+
+Before starting, remember to run all the code in the HPRFunctions.R file. This will make all the Homologous Protein Removal functions available to you in R.
+
+<br>
+
+## Data Format
+
+In your dataset, Below is a screenshot of part of a dataset that includes all these criteria:
+
+![](images/ExampleData.png)
+
+
+
+<br>
+
+### Genus Binner Function Library
+
+In this section, for each Genus Binner function, I will list all possible arguments and possible values of the arguments including the argument's default.
+
+<br>
+
+Because R does not read spaces between arguments, rather than write the functions on a single line as we have done so far, like this:
+
+
+```{r, eval = FALSE}
+mean(x)
+```
+
+
+I will expand the function across multiple lines and comment the arguments like this:
+
+```{r, eval = FALSE}
+mean(
+    x    #the numbers to find the mean of
+    )
+```
+
+<br>
+
+#### Homologous Protein Removal Functions:
+
+
+#### HPR()
+
+```{r , eval = FALSE}
+HPR(
+    data,                    #data as described at top of this document
+    procol,                  #column number with the protein names (default = none)
+    grocol,                  #column number to group the proteins by (default = none)
+    pattern = "OS="          #pattern to locate the genus by (default = "OS=")
+
+)
+```
+
+data, procol, grocol, pattern = "OS="
+
+<br>
+
+#### Questions or comments
+
+If you have any further questions, or comments, you can contact Matt Cook (cookm346@myumanitoba.ca).
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+

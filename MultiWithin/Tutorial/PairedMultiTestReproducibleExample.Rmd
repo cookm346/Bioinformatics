@@ -1,0 +1,488 @@
+---
+title: "Paired Multi-Test Functions Example"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+
+#convert within subject wide format data to long format (required for within-subjects ANOVA)
+pairedLong <- function(data, n_groups){
+    
+    #calculate number of subjects
+    n_subjects <- ncol(data) / n_groups
+    
+    #generate time condition categorical veriable
+    cond <- rep(paste("M", 1:n_groups, sep = ""), each = n_subjects)
+    
+    protein <- rep(rownames(data), each = ncol(data))
+    subject <- rep(1:(ncol(data) / n_groups), nrow(data))
+    time <- rep(cond, nrow(data))
+    scores <- c(t(data))
+    
+    dl <- data.frame(protein, subject, time, scores)
+    
+    #make sure subject variable is factor (not numeric)
+    dl$subject <- factor(dl$subject)
+    
+    return(dl)
+}
+    
+    
+    
+#paired student's t test p value
+    pairedStudentsp <- function(a, b){
+        t <- t.test(a, b, paired = TRUE)$p.value
+        return(t)
+    }
+    
+    
+    
+#paired ANOVA p value    
+    pairedANOVAp <- function(data_long){
+        a <- summary(aov(scores ~ time + Error(subject/time), data = data_long))
+        a <- as.numeric(unlist(a[[2]])["Pr(>F)1"])
+        return(a)
+    }
+
+    
+    
+#paired Wilcoxon signed rank p value
+   pairedWilcoxonp <- function(a, b){
+        w <- wilcox.test(a, b, paired = TRUE, alternative = "two.sided")$p.value
+        return(w)
+    }
+    
+    
+   
+#friedman test p value
+    friedmanp <- function(a, b){
+        f <- friedman.test(cbind(a, b))$p.value
+        return(f)
+    }
+    
+    
+
+#log2 fold change
+    log2fc <- function(a, b){
+        l <- mean(log2((b / a)))
+        return(l)
+    }
+    
+    
+    
+#compute requested paired test of significance and return the 
+# dataset with the requested test statistics appended to data   
+    multiPaired <- function(data, test = "t", n_groups = 2){
+        
+        #data in long format for within-subject ANOVA
+        data_long <- pairedLong(data, n_groups)
+        
+        if(n_groups == 2){
+                
+                #vector for storing p values
+                p <- matrix(0, nrow(data), 5)
+                
+                #for each row (protein):
+                for(i in 1:nrow(data)){
+                    
+                    #extract pre and post data
+                    pre <- as.numeric(data[i, 1:(ncol(data) / 2)])
+                    post <- as.numeric(data[i, ((ncol(data) / 2) + 1):ncol(data)])
+                    
+                    #students p
+                    p[i, 1] <- pairedStudentsp(pre, post)
+                    
+                    #long data for the ith protein
+                    dl <- data_long[data_long$protein %in% as.character(unique(data_long$protein)[i]), ]
+                    #paired ANOVA
+                    p[i, 2] <- pairedANOVAp(dl)
+                    
+                    #wilcoxon p
+                    p[i, 3] <- pairedWilcoxonp(pre, post)
+                    
+                    #friedman p
+                    p[i, 4] <- friedmanp(pre, post)
+                    
+                    #average log2 fold change
+                    p[i, 5] <- log2fc(pre, post)
+                    
+                }
+                
+                #as default only have t test included in p values
+                pt <- data.frame(p[ , 1])
+                colnames(pt) <- "Student's t p"
+                
+                #if all tests are chosen, 
+                # make this explicit so rest of function can work
+                if(any(test == "all")){
+                    test <- c("log2fc", "t", "anova", "friedman", "wilcoxon")
+                }
+                
+                #add ANOVA if requested
+                if(any(test == "anova")){
+                    pt <- cbind(pt, p[ , 2])
+                    colnames(pt)[ncol(pt)] <- "ANOVA p"
+                }
+                
+                #add wilcoxon test if requested
+                if(any(test == "wilcoxon")){
+                    pt <- cbind(pt, p[ , 3])
+                    colnames(pt)[ncol(pt)] <- "Wilcoxon p"
+                }
+                
+                #add friedman's test if requested
+                if(any(test == "friedman")){
+                    pt <- cbind(pt, p[ , 4])
+                    colnames(pt)[ncol(pt)] <- "Friedman p"
+                }
+                
+                #add log2 fold change if requested
+                if(any(test == "log2fc")){
+                    pt <- cbind(pt, p[ , 5])
+                    colnames(pt)[ncol(pt)] <- "Mean Log2FC"
+                }
+                
+                #append p values to data
+                r <- cbind(pt, data)
+                
+                #if default t test is not included
+                # removet results from output
+                if(all((test %in% "t") == FALSE)){
+                    r <- r[ , -1]
+                }
+        
+                } else {
+            
+            p <- matrix(0, nrow(data))
+            
+            for(i in 1:nrow(data)){
+                dl <- data_long[data_long$protein %in% as.character(unique(data_long$protein)[i]), ]
+                
+                #paired ANOVA
+                p[i] <- pairedANOVAp(dl)
+            }
+            
+            r <- cbind(p, data)
+            colnames(r)[1] <- "ANOVA p"
+        }
+        
+        
+        
+        return(r)
+    }
+    
+
+    
+
+```
+
+<br>
+
+Before starting, remember to run all the code in the MultiPairedFunctions.R file. This will make all the Paired Multi-Test functions available to you in R.
+
+<br>
+
+### Data Format
+
+In your dataset, each row should represent a microbe and each column should represent a subject. 
+
+Let's generate some simple data that fulfill these requirements and allow us to explore the Paired Multi-Test functions:
+
+
+```{r}
+set.seed(1)       #set random number generator
+n_subjects <- 3   #change the number of subjects
+n_microbes <- 10  #change the number of microbes
+data <- matrix(round(runif((n_subjects * 2 * n_microbes), 1, 100), 2), n_microbes, (n_subjects * 2))
+data <- round(data, 4)
+rownames(data) <- paste("Microbe", 1:n_microbes)
+colnames(data) <- c(paste("Sub", 1:n_subjects, "pre"), paste("Sub", 1:n_subjects, "post"))
+    
+```
+
+
+Let's look at the data the code above generated for us:
+
+```{r}
+data
+```
+
+We can see our data has 10 microbes (rows) and 3 subjects, each repeated twice (pre and post measures).
+
+Importantly, notice that all the *pre* data (Subject 1 pre, Subject 2 pre, Subject 3 pre) are followed by all the *post* data (Subject 1 post, Subject 2 post, Subject 3 post). It is important for the following functions to have the data organized like this rather than having order strictly by subjects (Subject 1 pre, Subject 1 post, Subject 2 pre, Subject 2 post, etc.). 
+
+
+<br>
+
+### Conduct Paired Student's *t* Test for each Microbe
+
+To conduct a Paired Student's *t* test for each microbe, we can use the following command:
+
+```{r, eval = FALSE}
+multiPaired(data)
+```
+
+```{r, echo=FALSE}
+d <- cbind(multiPaired(data)[ , 1:4], rep("...", nrow(data)))
+colnames(d)[5] <- "..."
+d
+```
+
+When we run the above command, we get our data returned to us, but now our original data has *p* values from the Paired Student's *t* test appended to our data in the first column.
+
+I've truncated the last few variables of the dataset for readability, but when you run the command above your entire dataset will be visible.
+
+<br>
+
+The default test statistic for the *multiPaired()* function is the *p* value for the Paired Student's *t* test. We can make this choice of test excplicit by using the following command:
+
+```{r, eval = FALSE}
+multiPaired(data, test = "t")
+```
+
+or
+
+```{r, eval = FALSE}
+multiPaired(data, "t")
+```
+
+Both commands will result in identical output as the output above:
+
+
+```{r, echo=FALSE}
+d <- cbind(multiPaired(data, "t")[ , 1:4], rep("...", nrow(data)))
+colnames(d)[5] <- "..."
+d
+```
+
+<br>
+
+#### Conducting Other Tests
+
+We can use this basic idea to get other test statistcs, such as a *p* value from the Wilcoxon Signed Rank test:
+
+```{r, eval = FALSE}
+multiPaired(data, "wilcoxon")
+```
+
+```{r, echo=FALSE}
+d <- cbind(multiPaired(data, "wilcoxon")[ , 1:4], rep("...", nrow(data)))
+colnames(d)[5] <- "..."
+d
+```
+
+<br>
+
+In the *multiPaired()* function there are five test statistics available: Paired Student's *t* test, ANOVA, Mean Log2 Fold Change, Wilcoxon Signed Rank test, and Friedman's test.
+
+Examples of the commands for each of these is below:
+
+```{r, eval = FALSE}
+multiPaired(data, "t")
+multiPaired(data, "anova")
+multiPaired(data, "log2fc")
+multiPaired(data, "wilcoxon")
+multiPaired(data, "friedman")
+```
+
+
+<br>
+
+### Saving your new Data
+
+Now that we can easily get test statistics for each microbe, we may want to save it to our computer, rather than simply having it visible in R.
+
+So far we've just been printing out our results to the console, but we can save the output:
+
+```{r}
+data_t <- multiPaired(data, "t")
+```
+
+Now we have an object called *data_t*, though we could have called it anything. 
+
+We can then use a command that is pre-loaded in R called *write.csv()*. This allows us to save various outputs as a .csv file. The *write.csv* functions has two required arguments. The first argument is the thing we want to save, which in this case is *data_t*. The second argument is the file name we want our saved file to have. For example:
+
+```{r, eval = FALSE}
+write.csv(data_t, "DataStudentsT.csv")
+```
+
+If you run those sequence of commands, you will have the file called *DataStudentT.csv* in your working directory. Your working directory is the place R is able to read and write files to. Notice that *DataStudentsT* is just a name we chose -- we could have saved it as anything.
+
+<br>
+
+To determine your working directory you can use the following command:
+
+```{r, eval = FALSE}
+getwd()
+```
+
+To change your working directory, you can use this command:
+
+```{r, eval = FALSE}
+setwd("Drive:/Where/You/Want/Your/Stuff/To/Save")
+```
+
+
+<br>
+
+### Advanced Usage
+
+Sometimes, we may want the results of more than one test (e.g., Student's *t* test and Mean Log2 Fold Change). To do this, we can combine, or concatenate, multiple test names to get multiple test statistics appended to our data. We can do so using the *c()* function in R. The *c* stands for combine, or concatenate. For example:
+
+```{r, eval = FALSE}
+multiPaired(data, c("t", "log2fc"))
+```
+
+```{r, echo=FALSE}
+d <- cbind(multiPaired(data, c("t", "log2fc"))[ , 1:4], rep("...", nrow(data)))
+colnames(d)[5] <- "..."
+d
+```
+
+Now we have both the *p* values from a Student's *t* test and the Mean Log2 Fold Change.
+
+<br>
+
+Alternatively, we can get all test statistics by using "all" for the *test* argument:
+
+```{r, eval = FALSE}
+multiPaired(data, "all")
+```
+
+```{r, echo=FALSE}
+d <- cbind(multiPaired(data, "all")[ , 1:5], rep("...", nrow(data)))
+colnames(d)[6] <- "..."
+d
+```
+
+Just as before, this will append the desired test statistics (in this case, all of them) to our data.
+```{r}
+
+```
+
+<br>
+
+### Analyzing More Than Two Measurements
+
+So far we have only look at situations when there are two measurements for each subject, but there are times when we will gave more than 2 measurements. Let's generate some data with four subjects with three measurements:
+
+```{r}
+set.seed(1)       #set random number generator
+n_subjects <- 3   #change the number of subjects
+n_microbes <- 10  #change the number of microbes
+data <- matrix(round(runif((n_subjects * 3 * n_microbes), 1, 100), 2), n_microbes, (n_subjects * 3))
+data <- round(data, 4)
+rownames(data) <- paste("Microbe", 1:n_microbes)
+colnames(data) <- c(paste("S", 1:n_subjects, "M1"), paste("S", 1:n_subjects, "M2"), paste("S", 1:n_subjects, "M3"))
+```
+
+Let's look at the data we just generated:
+
+```{r}
+data
+```
+
+We can see we have three subjects (*S1, S2, S3*), and each subject has three measurements (*M1, M2, M3*). And, critically, just as with two measurements, we have the variables ordered by measurement, then subject.
+
+<br>
+
+
+When we have more than two measurements, we can add the *n_groups* argument to our function. This will conduct a paired ANOVA.
+
+```{r, eval = FALSE}
+multiPaired(data, n_groups = 3)
+```
+
+
+```{r, echo = FALSE}
+d <- data.frame(multiPaired(data, n_groups = 3)[ , 1:6], rep("...", nrow(data)))
+colnames(d) <- c("ANOVA p", "S 1 M1", "S 2 M1", "S 3 M1", "S 1 M2", "S 2 M2","...")
+d
+```
+
+Just as before, we see that when we use this function we get our data given back to us, but with a column of *p* values appended to the data. 
+
+Also note that when the data contains three or more measurements (i.e., *n_groups* > 2), the *test* argument is no longer functional. With three or more groups the Paired ANOVA is automatically conducted.
+
+
+<br>
+
+### Paired Multi-Test Function Library
+
+In this section, for each Paired Multi-Test function, I will list all possible arguments and possible values of the arguments including the argument's default.
+
+<br>
+
+Because R does not read spaces between arguments, rather than write the functions on a single line as we have done so far, like this:
+
+
+```{r, eval = FALSE}
+mean(x)
+```
+
+
+I will expand the function across multiple lines and comment the arguments like this:
+
+```{r, eval = FALSE}
+mean(
+    x    #the numbers to find the mean of
+    )
+```
+
+<br>
+
+#### Paired Multi-Test Functions:
+
+
+#### multiPaired()
+
+```{r , eval = FALSE}
+multiPaired(
+    data,             #data as described at top of this document
+    test = "t",       #the test statistics to append to the data. 
+                        # "t"          = Student's t test
+                        # "anova"      = Paired One-Way Analysis of Variance
+                        # "log2fc"     = Mean Log2 Fold Change
+                        # "wilcoxon"   = Wilcoxon Signed Rank
+                        # "friedman"   = Friedman's test
+    n_groups = 2      #the number of measures for each subject (default = 2)
+)
+```
+
+<br>
+
+
+
+#### Questions or comments
+
+If you have any further questions, or comments, you can contact Matt Cook (cookm346@myumanitoba.ca).
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+
+

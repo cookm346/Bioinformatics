@@ -1,0 +1,168 @@
+---
+title: "Between Multi-Test Functions Example"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+
+multiBetween <- function(data){
+    
+    #vector to store p values
+    p <- matrix(0, (nrow(data) - 1))
+    
+    #conduct all between subject anaovas
+    for(i in 2:(nrow(data))){
+        #conduct ANOVA
+        a <- summary(aov(as.numeric(data[i, ]) ~ rep(c("control", "treatment"), each = 3)))
+        #extract p value and update p values vector
+        p[i - 1] <- as.numeric(unlist(a[[1]])["Pr(>F)1"])
+    }
+    
+    #append p values to original dataset and add column names
+    r <- data.frame(rbind(NA , p), data)
+    colnames(r) <- c("ANOVA p", colnames(data))
+    
+    #return results: original dataset with the ANOVA p values appended
+    return(r)
+}
+
+
+```
+
+<br>
+
+Before starting, remember to run all the code in the MultiBetweenFunctions.R file. This will make all the Paired Multi-Test functions available to you in R.
+
+<br>
+
+### Data Format
+
+In your dataset, each row should represent a microbe and each column should represent a subject. The first row of the data should be a categorical variable describing the category the subject of that column belongs to. The values of the categorical variable should be characters (i.e., treatment/control rather than 0/1). 
+
+Let's generate some simple data that fulfill these requirements and allow us to explore the Between Multi-Test functions:
+
+
+```{r, eval = FALSE}
+set.seed(1)       #set random number generator
+d <- matrix(round(runif(60, 1, 100), 2), 10, 6)
+cond <- rep(c("control", "treatment"), each = 3)
+data <- rbind(cond, d)
+rm(d, cond)
+rownames(data)[2:11] <- paste("Microbe", letters[1:10])
+colnames(data) <- paste("Subject", 1:6)
+```
+
+
+```{r, echo = FALSE}
+set.seed(1)       #set random number generator
+d <- matrix(round(runif(60, 1, 100), 2), 10, 6)
+cond <- rep(c("control", "treatment"), each = 3)
+data <- rbind.data.frame(cond, d)
+rm(d, cond)
+rownames(data)[2:11] <- paste("Microbe", letters[1:10])
+colnames(data) <- paste("Subject", 1:6)
+```
+
+Let's look at the data the code above generated for us:
+
+```{r}
+data
+```
+
+
+As we can see, we have six subjects with three in the control group and three in the treatment group. For each subject we have the counts of 10 microbes.
+
+<br>
+
+### Conducting Between Subjects ANOVA
+
+To conduct between subjects ANOVAs for each microbe, we can use the *multiBetween()* function:
+
+```{r, eval = FALSE}
+multiBetween(data)
+```
+
+```{r, echo = FALSE}
+d <- cbind(multiBetween(data)[1:6], rep("...", 11))
+colnames(d)[7] <- "..."
+d
+```
+
+We can see that when we use this function, our data is returned to us with a column of between subject ANOVA *p* values appended to our data.
+
+Notice that we don't have to specify which subjects are part of which groups, nor do we have to specify the number of groups we have. The function (really the *aov()* in *R*) will extract this information for us.
+
+<br>
+
+### Between Multi-Test Function Library
+
+In this section, for each Paired Multi-Test function, I will list all possible arguments and possible values of the arguments including the argument's default.
+
+<br>
+
+Because R does not read spaces between arguments, rather than write the functions on a single line as we have done so far, like this:
+
+
+```{r, eval = FALSE}
+mean(x)
+```
+
+
+I will expand the function across multiple lines and comment the arguments like this:
+
+```{r, eval = FALSE}
+mean(
+    x    #the numbers to find the mean of
+    )
+```
+
+<br>
+
+#### Between Multi-Test Functions:
+
+
+#### multiBetween()
+
+```{r , eval = FALSE}
+multiBetween(
+    data              #data as described at top of this document
+)
+```
+
+<br>
+
+
+
+#### Questions or comments
+
+If you have any further questions, or comments, you can contact Matt Cook (cookm346@myumanitoba.ca).
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+
+

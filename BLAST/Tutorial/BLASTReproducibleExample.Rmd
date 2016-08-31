@@ -1,0 +1,417 @@
+---
+title: "BLAST Functions Example"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include=FALSE}
+
+#get unique peptides with counts for each protein
+    peptides <- function(data){
+        #add a column of 1s to be used as tally for each peptide
+        d <- data.frame(data, Frequency = rep(1, nrow(data)))
+        
+        #compute peptide frequency for each protein by summing 1s for 
+        # unique peptides for each protein
+        s <- aggregate(data = d, Frequency ~ Protein + Peptide, sum)
+        
+        #return the results ordered by protein, then Peptide
+        return(s[order(s$Protein, s$Peptide), ])
+    }
+    
+    
+    
+#convert csv file to .fasta file
+    fasta <- function(data){
+        
+        #clean protein names to remove commas and spaces
+        # commas and spaces can mess up the BLAST output
+        for(i in 1:nrow(data)){
+            data_row <- gsub(pattern = ",", replacement = "/", x = data[i, 1])
+            data[i, 1] <- gsub(pattern = " ", replacement = "-", x = data_row) 
+        }
+        
+        #for each row, paste: > sign, protein, new line, peptide
+        f <- paste(">", data[,1], "\n", data[,2], sep = "")
+        
+        #write all sequences to .fasta file
+        write(f, "sequences.fasta")
+    }
+    
+
+    
+#run blast search
+    blast <- function(nHits = 10, e = 10){
+      
+        #start time
+        start <- Sys.time()
+        
+        #get .fasta files from working directory
+        print("Reading .fasta files...")
+        infiles <- list.files(pattern = "*.fasta")
+        
+        #remove ".fasta" from file names to be used in output names
+        print("Extracting file names...")
+        infilenames <- unlist(sapply(infiles, strsplit, split = "*.fasta"))
+        
+        #write BLAST+ command for each in file
+        #this is what would normally be typed in the command line
+        print("Writing BLASTp commands...")
+        
+        cmd <- paste('blastp -query ', infiles, ' -db db/nr.00 -out ', infilenames, '-Results.txt -num_alignments ', nHits, ' -evalue ', e,
+                     ' -outfmt "10 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc stitle"', sep = "")
+        
+        #length of cmd
+        lc <- length(cmd)
+        
+        print("Conducting BLASTp search...")
+        
+        #one loop iteration for each command
+        for(i in 1:lc){
+            shell(cmd[i], intern = TRUE)
+            
+            #print loop percentage counter
+            print(paste("Completed .fasta file", i, "of", lc, sep = " "))
+            
+        }
+        
+        #end time
+        end <- Sys.time()
+        
+        #print final message with time to complete search
+        dt <- round(as.numeric(difftime(end, start, units = "mins")), 2)
+        print(paste("BLASTp search complete (",  dt, " minutes).", sep = ""))
+        
+        return(results())
+    }
+    
+   
+     
+    cleanResultFiles <- function(){
+        
+        #read in all results files
+        outfiles <- list.files(pattern = "*-Results.txt")
+        
+        #file number sequence
+        f_seq <- 1:length(outfiles)
+        
+        #if any results files have size of 0 (meaning they are empty)
+        #store size 0 file locations
+        if(any(file.info(outfiles)$size == 0)){
+            #location of empty files
+            z <- which(file.info(outfiles)$size == 0)
+            
+            #remove empty file locations from sequence of files
+            f_seq <- f_seq[!(f_seq %in% z)]
+        }
+        
+        for(i in f_seq){
+            
+            f <- read.table(outfiles[i], header = FALSE, sep = ",", col.names = seq_len(30), fill = TRUE)
+            
+            #convert NAs to blanks
+            f[is.na(f)] <- ""
+            
+            #paste columns 14+
+            f[, 14] <- do.call(paste, f[14:ncol(f)])
+            
+            #remove unused columns
+            f <- f[ , -(15:ncol(f))]
+            
+            #overwrite file with cleaned up file
+            write.table(f, file = outfiles[i], row.names = FALSE, col.names = FALSE, sep = ",")
+            
+        }
+        
+    }
+    
+    mergeResultFiles <- function(){
+        
+        #read in all results files
+        outfiles <- list.files(pattern = "*-Results.txt")
+        
+        #file number sequence
+        f_seq <- 1:length(outfiles)
+        
+        #if any results files have size of 0 (meaning they are empty)
+        #store size 0 file locations
+        if(any(file.info(outfiles)$size == 0)){
+            #location of empty files
+            z <- which(file.info(outfiles)$size == 0)
+            
+            #remove empty file locations from sequence of files
+            f_seq <- f_seq[!(f_seq %in% z)]
+        }
+        
+        for(i in f_seq){
+            
+            f <- read.table(outfiles[i], header = FALSE, sep = ",", fill = TRUE, stringsAsFactors = FALSE)
+            
+            if(i == 1){
+                all_files <- rbind("", f)
+            } else {
+                all_files <- rbind(all_files, f)
+            }
+        }
+        
+        #remove the first blank row
+        all_files <- all_files[-1, ]
+        
+        colnames(all_files) <- c("Query sequence ID", "Subject sequence ID", "Percentage of identical matches", "Alignment length", 
+                                 "Number of mismatches", "Number of gap openings", "Start of alignment in query",
+                                 "End of alignment in query", "Start of alignment in subject", "End of alignment in subject",
+                                 "e-value", "Bit score", "Subject accession", "Subject title")
+        
+        write.table(all_files, file = "AllBLASTpResults.csv", row.names = FALSE, col.names = TRUE, sep = ",")
+    }
+    
+    
+
+    
+    results <- function(){
+        cleanResultFiles()
+        mergeResultFiles()
+        r <- read.table("AllBLASTpResults.csv", header = TRUE, sep = ",", fill = TRUE, stringsAsFactors = FALSE)
+        return(r)
+    }
+    
+
+
+
+  
+  
+
+```
+
+<br>
+
+Before starting, remember to run all the code in the BLASTFunctions.R file. This will make all the BLAST functions available to you in R.
+
+<br>
+
+If you are working on the data computer, you can skip to the section called *Data Formats*, and you're very close to being able to conduct BLASt searches. If you are not working on the data computer, you will need to download and and install BLAST+ from https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download as well as download the nr database from the same webpage. A short explanation on how to do that can be found here: https://evomics.org/learning/bioinformatics/blast-laboratory/
+
+<br>
+
+### Data Formats
+
+There are two types of data that can be used for BLAST searches, but format 2 will be more flexible (explained below).
+
+#### Format 1
+
+The first format is a .fasta file. An example of this format is shown below. This format is organized with a ">" symbol followed by the sequence ID, then the actual sequence on the following line. These two pieces of information are repeated for as many sequences as you have.
+
+```{r, eval = FALSE}
+>Protein A
+NLLSVAYK
+>Protein B
+VISSIEQK
+>Protein C
+YLIPNATQPESK
+...
+```
+
+If your data is in .fasta format, no further formatting is necessary and you can skip to the section below titled *Conducting a BLAST Search*.
+
+<br>
+
+#### Format 2
+
+The second data format you may have is simply a list of peptides with some name for each sequence as shown below. Critically, your data must have the name *Protein* for the protein variable and *Peptide* for the peptide variable.
+
+```{r, eval = FALSE}
+Protein              Peptide
+Protein A            NLLSVAYK
+Protein B            VISSIEQK
+Protein C            YLIPNATQPESK
+...                  ...
+```
+
+
+If your data is in this format, it will need to be formatted into a .fasta file. We'll work through an example of how to do this.
+
+<br>
+
+Let's generate some simple data that fit the requirements of format 2 that will allow us to explore the BLAST functions:
+
+
+```{r}
+set.seed(1) #set random number generator
+data <- data.frame(Protein = rep(paste("protein", letters[1:3]), c(2,3,5)), Peptide = replicate(10, paste(sample(toupper(letters[1:2]), 3, replace = TRUE), collapse = "")))
+```
+
+Here is the data the previous command just generated for us:
+
+```{r}
+data
+```
+
+We can see that we have 3 proteins (a, b, and c) and they each appear in our data 2, 3, and 5 times, respectively.
+
+Also, we can see we have 6 unique peptides (AAA, AAB, ABA, ABB, BAB, and BBB).
+
+<br>
+
+###Summarizing and Formatting Raw Data into .fasta Format
+
+Because peptides may be repeated in the data, we can extract the unique peptides for each protein and display the peptides frequency for that protein:
+
+```{r}
+peptides(data)
+```
+
+The top two rows show us that two peptides (AAB and BAB) were identified as part of *protein a*, and each occured once in the data.
+
+<br>
+
+Let's save this output as *peps* for peptides (though we could call it anything):
+
+```{r}
+peps <- peptides(data)
+```
+
+<br>
+
+Now we can convert out summary of the unique peptides into a .fasta file as described above, by using the following command:
+
+```{r, eval = FALSE}
+fasta(peps)
+```
+
+This will convert our summary of the unique peptides into a .fasta file and save it in our working directory.
+
+We can get our working directory by using the followig command:
+
+```{r, eval = FALSE}
+getwd()
+```
+
+We can set our working directory by running this command:
+
+```{r, eval = FALSE}
+setwd("Drive:/Where/You/Want/Your/Stuff/To/Save")
+```
+
+
+<br>
+
+#### Conducting a BLAST Search
+
+To a conduct a BLAST search we can use the *blast()* command. When you run this command serveal things will happen. 
+
+- The function will search for all .fasta files in your working directory (explanation above). 
+
+- Result files will also appear in your working directory for each corresponding .fasta file. 
+- A csv file file of all the results will appear in your working directory. Also, the function will print the results in R.
+
+Due to this last point, we will almost always want to save the output of this command to an object, such as *result*, as shown below.
+
+We can conduct a BLAST search by using the command below:
+
+
+```{r, eval = FALSE}
+result <- blast()
+```
+
+The *blast()* function has two arguments. The first argument is the number of top hits to return for each peptide. The second argument is the minimum e value needed to return a match. Both of these arguments have default values of 10. Running the command above would return the top 10 hits for each peptide that have e values lower than 10.
+
+Likely, these criteria are too loose, and we would want to specify stricter criteria. For example, we may only want the top 3 hits with e values lower than 0.001.
+
+
+```{r, eval = FALSE}
+result <- blast(nHits = 3, e = 0.001)
+```
+
+or simply:
+
+```{r, eval = FALSE}
+result <- blast(3, 0.001)
+```
+
+<br>
+
+### BLAST Function Library
+
+In this section, for each BLAST function, I will list all possible arguments and possible values of the arguments including the argument's default.
+
+<br>
+
+Because R does not read spaces between arguments, rather than write the functions on a single line as we have done so far, like this:
+
+
+```{r, eval = FALSE}
+mean(x)
+```
+
+
+I will expand the function across multiple lines and comment the arguments like this:
+
+```{r, eval = FALSE}
+mean(
+    x    #the numbers to find the mean of
+    )
+```
+
+<br>
+
+#### BLAST Functions:
+
+
+#### peptides()
+
+```{r , eval = FALSE}
+peptides(
+    data          #data as described at top of this document
+)
+```
+
+<br>
+
+#### fasta()
+
+```{r , eval = FALSE}
+fasta(
+    data          #the output from the peptides() function
+)
+```
+
+<br>
+
+#### blast()
+
+```{r , eval = FALSE}
+blast(
+    nHits = 10,   #number of top hits for each peptide (default = 10)
+    e = 10        #maximum e value displayed (default = 10)
+)
+```
+
+<br>
+
+
+
+
+
+
+#### Questions or comments
+
+If you have any further questions, or comments, you can contact Matt Cook (cookm346@myumanitoba.ca).
+
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+
