@@ -17,7 +17,7 @@ Before starting, remember to run all the code in the HPRFunctions.R file. This w
 
 ## Data Format
 
-In your dataset, there are only two required variables (though you can have more). The first is a "Protein name" variable that has some pattern to identify the genus and species. For example, in the screenshot of the dataset below the genus and species are identifiable after "OS=". This gives us some way to search for and extract the genus and species name. The second variable your dataset must containis the grouping variable. This will be the variable the function will look to see if there is ambiguity within each group.
+In your dataset, there are only two required variables (though you can have more and variables can be in any order). The first is a "protein name" variable that has some pattern to identify the genus and species. For example, in the screenshot of the dataset below, the genus and species are identifiable after "OS=". This gives us some way to search for and extract the genus and species name. The second variable your dataset must contain the grouping variable. This will be the variable the function will look to see if there is ambiguity in the genus and species within each group.
 
 Below is a screenshot of part of a dataset that includes all these criteria:
 
@@ -54,7 +54,7 @@ Here is a screenshot of part of the output from running the *HPR()* function.
 
 ### Homologous Protein Removal Function Library
 
-In this section, for each Genus Binner function, I will list all possible arguments and possible values of the arguments including the argument's default.
+In this section, for each Homologous Protein Removal function, I will list all possible arguments and possible values of the arguments including the argument's default.
 
 <br>
 
@@ -84,14 +84,13 @@ mean(
 ```{r , eval = FALSE}
 HPR(
     data,                    #data as described at top of this document
-    procol,                  #column number with the protein names (default = none)
-    grocol,                  #column number to group the proteins by (default = none)
+    procol,                  #protein name column number (default = none)
+    grocol,                  #grouping column number (default = none)
     pattern = "OS="          #pattern to locate the genus by (default = "OS=")
 
 )
 ```
 
-data, procol, grocol, pattern = "OS="
 
 <br>
 
