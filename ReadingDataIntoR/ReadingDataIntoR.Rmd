@@ -175,7 +175,7 @@ rownames(data) <- paste("Microbe", 1:10)
 ```
 
 
-Another option to deal with missing values is to remove any observation (row) in a dataset that has a missing value. We can use the *complete.cases()* function to see which observations (rows) in our dataset are complete:
+Another option to deal with missing values is to remove any observation (row) in a dataset that has a missing value. We can use the *complete.cases()* function similar to how we did with the *is.na()* function above to see which observations (rows) in our dataset are complete:
 
 ```{r}
 data[complete.cases(data), ]

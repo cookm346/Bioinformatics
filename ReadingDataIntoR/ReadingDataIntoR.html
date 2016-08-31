@@ -249,7 +249,7 @@ rownames(data) &lt;- paste(&quot;Microbe&quot;, 1:10)</code></pre>
 </div>
 <div id="removing-incomplete-observations" class="section level4">
 <h4>Removing Incomplete Observations</h4>
-<p>Another option to deal with missing values is to remove any observation (row) in a dataset that has a missing value. We can use the <em>complete.cases()</em> function to see which observations (rows) in our dataset are complete:</p>
+<p>Another option to deal with missing values is to remove any observation (row) in a dataset that has a missing value. We can use the <em>complete.cases()</em> function similar to how we did with the <em>is.na()</em> function above to see which observations (rows) in our dataset are complete:</p>
 <pre class="r"><code>data[complete.cases(data), ]</code></pre>
 <pre><code>##            Subject 1 Subject 2 Subject 3 Subject 4 Subject 5 Subject 6
 ## Microbe 1     27.285    21.391    93.536    48.726    82.274    48.284
