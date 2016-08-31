@@ -115,8 +115,75 @@ Had we wanted to use our third column as our row names, we would have used *row.
 
 Now our data is read into R just the way we want, and is ready for further processing and analysis.
 
+<br>
+
+### Dealing with Missing Values
+
+Many times there will be missing values in a dataset. To be concrete, let's generate a dataset with some missing values:
+
+```{r}
+set.seed(1) #set random number generator
+data <- matrix(round(runif(60, 1, 100), 3), 10, 6)
+data[7, 2] <- NA; data[7, 3] <- NA; data[9, 6] <- NA
+colnames(data) <- paste("Subject", 1:6)
+rownames(data) <- paste("Microbe", 1:10)
+```
+
+Let's have a look at the data the code above generated:
+
+```{r}
+data
+```
+
+As we can see, we have three missing (*NA*) values -- Subject 2 and 3 each have a missing value for Microbe 7, and Subject 6 has a missing value for Microbe 9.
 
 <br>
+
+#### Imputing Missing Values with 0s
+
+There are many different ways to deal with these missing values. If we are going to calculate proportions and the only reason the value is missing is because a particular protein wasn't identified for a subject, we can impute the missing values with 0s.
+
+The *is.na()* function in R will tell us all the values in our matrix that are missing:
+
+```{r}
+is.na(data)
+```
+
+As we can see, there are three TRUE values corresponding to the missing values of our dataset. To impute these values with a zero we simply use this command:
+
+```{r}
+data[is.na(data)] <- 0
+```
+
+This changes all the missing values in our dataset to 0s. Let's have a look:
+
+```{r}
+data
+```
+
+<br>
+
+#### Removing Incomplete Observations
+
+
+```{r, echo = FALSE}
+set.seed(1) #set random number generator
+data <- matrix(round(runif(60, 1, 100), 3), 10, 6)
+data[7, 2] <- NA; data[7, 3] <- NA; data[9, 6] <- NA
+colnames(data) <- paste("Subject", 1:6)
+rownames(data) <- paste("Microbe", 1:10)
+```
+
+
+Another option to deal with missing values is to remove any observation (row) in a dataset that has a missing value. We can use the *complete.cases()* function to see which observations (rows) in our dataset are complete:
+
+```{r}
+data[complete.cases(data), ]
+```
+
+As we can see, microbes 7 and 9 have been removed.
+
+
 <br>
 
 #### Questions or comments

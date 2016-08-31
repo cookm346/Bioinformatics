@@ -189,12 +189,85 @@ $(document).ready(function () {
 <p>Had we wanted to use our third column as our row names, we would have used <em>row.names = 3</em>.</p>
 <p><br></p>
 <p>Now our data is read into R just the way we want, and is ready for further processing and analysis.</p>
-<p><br> <br></p>
+<p><br></p>
+</div>
+<div id="dealing-with-missing-values" class="section level3">
+<h3>Dealing with Missing Values</h3>
+<p>Many times there will be missing values in a dataset. To be concrete, let’s generate a dataset with some missing values:</p>
+<pre class="r"><code>set.seed(1) #set random number generator
+data &lt;- matrix(round(runif(60, 1, 100), 3), 10, 6)
+data[7, 2] &lt;- NA; data[7, 3] &lt;- NA; data[9, 6] &lt;- NA
+colnames(data) &lt;- paste(&quot;Subject&quot;, 1:6)
+rownames(data) &lt;- paste(&quot;Microbe&quot;, 1:10)</code></pre>
+<p>Let’s have a look at the data the code above generated:</p>
+<pre class="r"><code>data</code></pre>
+<pre><code>##            Subject 1 Subject 2 Subject 3 Subject 4 Subject 5 Subject 6
+## Microbe 1     27.285    21.391    93.536    48.726    82.274    48.284
+## Microbe 2     37.840    18.479    22.002    60.357    65.059    86.260
+## Microbe 3     57.712    69.015    65.516    49.861    78.510    44.372
+## Microbe 4     90.913    39.026    13.430    19.436    55.751    25.235
+## Microbe 5     20.967    77.214    27.455    82.910    53.442     7.997
+## Microbe 6     89.941    50.272    39.225    67.178    79.146    10.847
+## Microbe 7     94.523        NA        NA    79.630     3.310    32.311
+## Microbe 8     66.419    99.199    38.856    11.686    48.246    52.345
+## Microbe 9     63.282    38.623    87.099    72.647    73.499        NA
+## Microbe 10     7.117    77.967    34.695    41.716    69.580    41.276</code></pre>
+<p>As we can see, we have three missing (<em>NA</em>) values – Subject 2 and 3 each have a missing value for Microbe 7, and Subject 6 has a missing value for Microbe 9.</p>
+<p><br></p>
+<div id="imputing-missing-values-with-0s" class="section level4">
+<h4>Imputing Missing Values with 0s</h4>
+<p>There are many different ways to deal with these missing values. If we are going to calculate proportions and the only reason the value is missing is because a particular protein wasn’t identified for a subject, we can impute the missing values with 0s.</p>
+<p>The <em>is.na()</em> function in R will tell us all the values in our matrix that are missing:</p>
+<pre class="r"><code>is.na(data)</code></pre>
+<pre><code>##            Subject 1 Subject 2 Subject 3 Subject 4 Subject 5 Subject 6
+## Microbe 1      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 2      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 3      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 4      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 5      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 6      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 7      FALSE      TRUE      TRUE     FALSE     FALSE     FALSE
+## Microbe 8      FALSE     FALSE     FALSE     FALSE     FALSE     FALSE
+## Microbe 9      FALSE     FALSE     FALSE     FALSE     FALSE      TRUE
+## Microbe 10     FALSE     FALSE     FALSE     FALSE     FALSE     FALSE</code></pre>
+<p>As we can see, there are three TRUE values corresponding to the missing values of our dataset. To impute these values with a zero we simply use this command:</p>
+<pre class="r"><code>data[is.na(data)] &lt;- 0</code></pre>
+<p>This changes all the missing values in our dataset to 0s. Let’s have a look:</p>
+<pre class="r"><code>data</code></pre>
+<pre><code>##            Subject 1 Subject 2 Subject 3 Subject 4 Subject 5 Subject 6
+## Microbe 1     27.285    21.391    93.536    48.726    82.274    48.284
+## Microbe 2     37.840    18.479    22.002    60.357    65.059    86.260
+## Microbe 3     57.712    69.015    65.516    49.861    78.510    44.372
+## Microbe 4     90.913    39.026    13.430    19.436    55.751    25.235
+## Microbe 5     20.967    77.214    27.455    82.910    53.442     7.997
+## Microbe 6     89.941    50.272    39.225    67.178    79.146    10.847
+## Microbe 7     94.523     0.000     0.000    79.630     3.310    32.311
+## Microbe 8     66.419    99.199    38.856    11.686    48.246    52.345
+## Microbe 9     63.282    38.623    87.099    72.647    73.499     0.000
+## Microbe 10     7.117    77.967    34.695    41.716    69.580    41.276</code></pre>
+<p><br></p>
+</div>
+<div id="removing-incomplete-observations" class="section level4">
+<h4>Removing Incomplete Observations</h4>
+<p>Another option to deal with missing values is to remove any observation (row) in a dataset that has a missing value. We can use the <em>complete.cases()</em> function to see which observations (rows) in our dataset are complete:</p>
+<pre class="r"><code>data[complete.cases(data), ]</code></pre>
+<pre><code>##            Subject 1 Subject 2 Subject 3 Subject 4 Subject 5 Subject 6
+## Microbe 1     27.285    21.391    93.536    48.726    82.274    48.284
+## Microbe 2     37.840    18.479    22.002    60.357    65.059    86.260
+## Microbe 3     57.712    69.015    65.516    49.861    78.510    44.372
+## Microbe 4     90.913    39.026    13.430    19.436    55.751    25.235
+## Microbe 5     20.967    77.214    27.455    82.910    53.442     7.997
+## Microbe 6     89.941    50.272    39.225    67.178    79.146    10.847
+## Microbe 8     66.419    99.199    38.856    11.686    48.246    52.345
+## Microbe 10     7.117    77.967    34.695    41.716    69.580    41.276</code></pre>
+<p>As we can see, microbes 7 and 9 have been removed.</p>
+<p><br></p>
 </div>
 <div id="questions-or-comments" class="section level4">
 <h4>Questions or comments</h4>
 <p>If you have any further questions, or comments, you can contact Matt Cook (<a href="mailto:cookm346@myumanitoba.ca">cookm346@myumanitoba.ca</a>).</p>
 <p><br> <br> <br> <br> <br> <br> <br> <br> <br> <br></p>
+</div>
 </div>
 
 
