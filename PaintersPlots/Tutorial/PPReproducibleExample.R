@@ -5,7 +5,7 @@
 #INSTRUCTIONS:
 # 1.) Run all code in PTMFunctions.R
 #       This will load all the functions into your workspace
-# 2.) use the code below to explore a verifiable, reproducible example
+# 2.) use the code below to explore a verifiable and reproducible example
 #########################################################################
 
 
