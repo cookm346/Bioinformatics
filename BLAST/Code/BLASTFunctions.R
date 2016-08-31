@@ -50,7 +50,7 @@
         #this is what would normally be typed in the command line
         print("Writing BLASTp commands...")
         
-        cmd <- paste('blastp -query ', infiles, ' -db db/nr.00 -out ', infilenames, '-Results.txt -num_alignments ', nHits, ' -evalue ', e,
+        cmd <- paste('blastp -query ', infiles, ' -db db/nr -out ', infilenames, '-Results.txt -num_alignments ', nHits, ' -evalue ', e,
                      ' -outfmt "10 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc stitle"', sep = "")
         
         #length of cmd

@@ -1,5 +1,5 @@
 #set working directory
-    setwd("C:/Users/HIV-Proteomics/Desktop/Matt/BLAST+/TestArea")
+    setwd("D:/BLASTp")
     
     #optional:
         #read data
